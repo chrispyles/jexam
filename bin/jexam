@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+
+########################
+##### jExam Binary #####
+########################
+
+import argparse
+
+from jexam.parser import main as jexam_parser
+
+parser = argparse.ArgumentParser()
+parser.add_argument("master", type=str, help="Path to exam master notebook")
+parser.add_argument("-o", "--output-dir", default="dist", help="Path at which to write output notebooks")
+parser.add_argument("-f", "--format", type=str, default="otter", help="Name of autograder format; 'otter' or 'ok'")
+parser.add_argument("-s", "--seed", type=int, default=None, help="Random seed for NumPy to run before execution")
+
+args = parser.parse_args()
+jexam_parser(args)
