@@ -567,29 +567,6 @@ def replace_cell_solutions(cell):
     else:
         return copy.deepcopy(cell)
 
-# def strip_solutions(original_nb_path, stripped_nb_path):
-#     """Write a notebook with solutions stripped
-    
-#     Args:
-#         original_nb_path (path-like): path to original notebook
-#         stripped_nb_path (path-like): path to new stripped notebook
-#     """
-#     with open(original_nb_path) as f:
-#         nb = nbformat.read(f, NB_VERSION)
-#     md_solutions = []
-#     for i, cell in enumerate(nb['cells']):
-#         cell['source'] = '\n'.join(replace_solutions(get_source(cell)))
-#         if is_markdown_solution_cell(cell):
-#             md_solutions.append(i)
-#     md_solutions.reverse()
-#     for i in md_solutions:
-#         del nb['cells'][i]
-    
-#     # remove output from student version
-#     remove_output(nb)
-#     with open(stripped_nb_path, 'w') as f:
-#         nbformat.write(nb, f, NB_VERSION)
-
 
 #---------------------------------------------------------------------------------------------------
 # NOTEBOOK PARSER
