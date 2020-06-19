@@ -15,5 +15,6 @@ parser.add_argument("-f", "--format", type=str, default="otter", help="Name of a
 parser.add_argument("-s", "--seed", type=int, default=None, help="Random seed for NumPy to run before execution")
 parser.add_argument("-q", "--quiet", default=False, action="store_true", help="Run without printing status")
 
-args = parser.parse_args()
-jexam_parser(args)
+if __name__ == "__main__":
+    args = parser.parse_args()
+    jexam_parser(args)
