@@ -4,3 +4,6 @@ ipython
 nbconvert
 setuptools
 numpy
+
+# testing requirements
+codecov

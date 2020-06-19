@@ -262,7 +262,10 @@ def get_delim_config(cell, delim):
     if not is_raw_cell(cell):
         return False
     source = get_source(cell)[1:]
-    return yaml.full_load("\n".join(source))
+    config = yaml.full_load("\n".join(source))
+    if config is None:
+        return {}
+    return config
 
 
 #---------------------------------------------------------------------------------------------------
@@ -574,7 +577,7 @@ def replace_cell_solutions(cell):
 
 def parse_notebook(nb):
     in_introduction, in_question, in_version, in_conclusion = tuple(False for _ in range(4))
-    cells, config = [], None
+    cells, config = [], {}
     questions, versions = [], []
     for cell in nb.cells:
 
@@ -611,7 +614,7 @@ def parse_notebook(nb):
                 versions = [Version(copy.deepcopy(cells))]
                 cells = []
             questions.append(Question(versions, config.get("points", 1), config.get("manual", False)))
-            versions, config, cells = [], None, []
+            versions, config, cells = [], {}, []
         elif in_version and is_delim_cell(cell, "version", False):
             in_version = False
             versions.append(Version(copy.deepcopy(cells)))
@@ -650,7 +653,7 @@ def main(args):
     seed = args.seed or Exam.config.get("seed", 42)
     np.random.seed(seed)
 
-    master, result = pathlib.Path(args.master), pathlib.Path(args.output_dir)
+    master, result = pathlib.Path(args.master), pathlib.Path(args.result)
 
     # load notebook and parse
     nb = nbformat.read(master, as_version=NB_VERSION)
@@ -658,7 +661,7 @@ def main(args):
 
     # create dirs
     for i in range(Exam.config["num_students"]):
-        if (i + 1) % 50 == 0:
+        if (i + 1) % 50 == 0 and not args.quiet:
             print(f"Generating exam {i + 1}")
         output_dir = result / f"exam_{i}"
         nb_name = master.name
