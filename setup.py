@@ -11,7 +11,7 @@ setuptools.setup(
 	version = "0.0.1",
 	author = "Chris Pyles",
 	author_email = "cpyles@berkeley.edu",
-	description = "Jupyter Notebook exa, generator",
+	description = "Jupyter Notebook exam generator",
 	long_description = long_description,
 	long_description_content_type = "text/markdown",
 	url = "https://github.com/chrispyles/jexam",
