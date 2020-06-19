@@ -1,8 +1,10 @@
 import setuptools
 
-# with open("README.md", "r") as fh:
-# 	long_description = fh.read()
-long_description = ""
+with open("README.md", "r") as fh:
+	long_description = fh.read()
+
+with open("requirements.txt") as f:
+	install_requires = f.read().split("\n")
 
 setuptools.setup(
 	name = "jexam",
@@ -20,8 +22,6 @@ setuptools.setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
 	],
-	install_requires=[
-		"pyyaml", "nbformat", "ipython", "nbconvert", "setuptools", "numpy"
-	],
+	install_requires = install_requires,
 	scripts=["bin/jexam"],
 )

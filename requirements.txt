@@ -1,0 +1,6 @@
+pyyaml
+nbformat
+ipython
+nbconvert
+setuptools
+numpy
