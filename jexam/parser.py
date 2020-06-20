@@ -192,7 +192,7 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
             filtering = export_cell.get('filtering', True)
         ))
 
-    remove_output(autograder)
+    # remove_output(autograder)
     remove_output(student)
     
     # write notebooks
