@@ -13,7 +13,7 @@ from textwrap import dedent
 
 from jexam.parser import main as jexam
 
-bin_globals = {}
+bin_globals = {"__name__": "__not_main__"}
 with open("bin/jexam") as f:
     exec(f.read(), bin_globals)
 
