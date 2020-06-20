@@ -10,6 +10,7 @@ import pathlib
 
 from contextlib import redirect_stdout
 from textwrap import dedent
+
 from jexam.parser import main as jexam
 
 bin_globals = {}
@@ -94,7 +95,7 @@ class TestJexam(unittest.TestCase):
     def test_seed_150(self):
         stdout = io.StringIO()
         with redirect_stdout(stdout):
-            self.run_and_check_jexam()
+            self.run_and_check_jexam(150)
         self.assertEqual(stdout.getvalue().strip(), type(self).expected_stdout.strip(), "Process stdout incorrect")
     
     def tearDown(self):
