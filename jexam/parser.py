@@ -14,7 +14,7 @@ import numpy as np
 
 from collections import namedtuple
 
-from .utils import str_to_doctest
+from .utils import str_to_doctest, generate
 
 
 #---------------------------------------------------------------------------------------------------
@@ -670,3 +670,9 @@ def main(args):
     all_tests_path = result / 'tests'
     os.makedirs(all_tests_path, exist_ok=True)
     write_all_version_tests(all_tests_path)
+
+    # generate Gradescope zip file
+    if Exam.config.get("generate", {}):
+        if not args.quiet:
+            print("Generating autograder zip file...")
+            generate(args.result, Exam.config.get("generate"))
