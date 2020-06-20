@@ -20,8 +20,8 @@ To install jExam, use pip:
 pip install jexam
 ```
 
-If you are also going to be using Otter and Gradescope, you will need to install Otter so that the configuration zip files can be generated.
+If you are also going to be using Otter and Gradescope, you will need to install Otter so that the configuration zip files can be generated. **Note that jExam is currently only compatible with the beta version of Otter, which must be installed from Git.**
 
 ```
-pip install otter-grader
+pip install git+https://github.com/ucbds-infra/otter-grader.git@beta
 ```
