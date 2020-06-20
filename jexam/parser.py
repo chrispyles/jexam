@@ -481,13 +481,14 @@ def remove_hidden_tests(test_dir):
 
 def write_all_version_tests(output_dir):
     for question in Exam.questions:
-        for version in question.versions:
-            gen_test_cell(
-                version.get_hash(),
-                question.points,
-                version.tests,
-                output_dir
-            )
+        if not question.manual:
+            for version in question.versions:
+                gen_test_cell(
+                    version.get_hash(),
+                    question.points,
+                    version.tests,
+                    output_dir
+                )
 
 
 #---------------------------------------------------------------------------------------------------
