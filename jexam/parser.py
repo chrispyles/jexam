@@ -154,6 +154,7 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
                     version.tests,
                     st_test_dir
                 ))
+                remove_hidden_tests(st_test_dir)
 
             autograder.cells.append(gen_test_cell(
                 version.get_hash(),
