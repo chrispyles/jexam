@@ -6,7 +6,7 @@
 
 import argparse
 
-from jexam.parser import main as jexam_parser
+from jexam.parser import main as jexam
 
 parser = argparse.ArgumentParser()
 parser.add_argument("master", type=str, help="Path to exam master notebook")
@@ -17,4 +17,4 @@ parser.add_argument("-q", "--quiet", default=False, action="store_true", help="R
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    jexam_parser(args)
+    jexam(args)
