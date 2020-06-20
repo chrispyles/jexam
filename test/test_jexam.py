@@ -32,6 +32,19 @@ class TestJexam(unittest.TestCase):
             with open(p2) as f2:
                 self.assertEqual(f1.read(), f2.read(), f"Contents of {p1} did not equal contents of {p2}")
 
+    def assertDirsEqual(self, dir1, dir2):
+        self.assertTrue(os.path.exists(dir1), f"{dir1} does not exist")
+        self.assertTrue(os.path.exists(dir2), f"{dir2} does not exist")
+        self.assertTrue(os.path.isfile(dir1) == os.path.isfile(dir2), f"{dir1} and {dir2} have different type")
+
+        if os.path.isfile(dir1):
+            self.assertFilesEqual(dir1, dir2)
+        else:
+            self.assertEqual(os.listdir(dir1), os.listdir(dir2), f"{dir1} and {dir2} have different contents")
+            for f1, f2 in zip(os.listdir(dir1), os.listdir(dir2)):
+                f1, f2 = os.path.join(dir1, f1), os.path.join(dir2, f2)
+                self.assertDirsEqual(f1, f2)
+
     def run_and_check_jexam(self, seed=None):
         nb_path = str(TEST_FILES_PATH / 'test-exam.ipynb')
         command = [nb_path]
@@ -42,49 +55,7 @@ class TestJexam(unittest.TestCase):
 
         correct_dir = "dist-correct" if seed is None else f"dist-correct-{seed}"
 
-        self.assertTrue(os.path.isdir("dist"), "directory ./dist does not exist")
-        self.assertEqual(
-            os.listdir("dist"), os.listdir(TEST_FILES_PATH / correct_dir), 
-            "Contents of ./dist not correct"
-        )
-
-        # check that all dist/exam_*/* are correct
-        for d1, d2 in zip(os.listdir("dist"), os.listdir(TEST_FILES_PATH / correct_dir)):
-            d1, d2 = os.path.join("dist", d1), os.path.join(TEST_FILES_PATH / correct_dir, d2)
-            self.assertEqual(os.listdir(d1), os.listdir(d2), f"Contents of {d1} not correct")
-
-            # check dist/exam_*/*/*
-            for d11, d22 in zip(os.listdir(d1), os.listdir(d2)):
-                if os.path.split(d1)[1] == "tests":
-                    continue
-                d11, d22 = os.path.join(d1, d11), os.path.join(d2, d22)
-                
-                empty_tests = "tests" in os.listdir(d11) and len(os.listdir(os.path.join(d11, "tests"))) == 0
-
-                if not empty_tests:
-                    self.assertEqual(os.listdir(d11), os.listdir(d22), f"Contents of {d11} not correct")
-                else:
-                    d11_contents, d22_contents = os.listdir(d11), os.listdir(d22)
-                    d11_contents.remove("tests")
-                    try:
-                        d22_contents.remove("tests")
-                    except ValueError:
-                        pass
-                    self.assertEqual(d11_contents, d22_contents, f"Contents of {d11} not correct")
-
-                # check file contents
-                for f1111, f2222 in zip(os.listdir(d11), os.listdir(d22)):
-                    f1111, f2222 = os.path.join(d11, f1111), os.path.join(d22, f2222)
-                    
-                    # if tests dir, look at all files in the directory
-                    if os.path.split(f1111)[1] == "tests" and not empty_tests:
-                        for f11111, f22222 in zip(os.listdir(f1111), os.listdir(f2222)):
-                            f11111, f22222 = os.path.join(f1111, f11111), os.path.join(f2222, f22222)
-                            self.assertFilesEqual(f11111, f22222)
-                    
-                    # otherwise, check contents
-                    elif not empty_tests:
-                        self.assertFilesEqual(f1111, f2222)
+        self.assertDirsEqual("dist", TEST_FILES_PATH / correct_dir)
 
     def test_notebook_seed(self):
         stdout = io.StringIO()

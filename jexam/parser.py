@@ -110,25 +110,20 @@ class Exam:
     conclusion = []
 
 def create_and_write_exam_instance(output_dir, nb_name, num_questions):
-    ag_test_dir = output_dir / 'autograder' / 'tests'
-    st_test_dir = output_dir / 'student' / 'tests'
+    test_dir = output_dir / 'tests'
 
-    os.makedirs(ag_test_dir, exist_ok=True)
     if Exam.config.get("public_tests", False):
-        os.makedirs(st_test_dir, exist_ok=True)
+        os.makedirs(test_dir, exist_ok=True)
     else:
-        os.makedirs(output_dir / 'student', exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
-    autograder = nbformat.v4.new_notebook()
     student = nbformat.v4.new_notebook()
     
     # init cell
     if Exam.config.get("init_cell", True):
-        autograder.cells.append(gen_init_cell())
         student.cells.append(gen_init_cell())
     
     # introduction
-    autograder.cells.extend(Exam.introduction)
     student.cells.extend(Exam.introduction)
 
     # get question indices
@@ -138,39 +133,91 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
 
     # questions
     for i in range(num_questions):
-        autograder.cells.append(gen_question_header_cell(i + 1))
         student.cells.append(gen_question_header_cell(i + 1))
 
         question = Exam.questions[question_idx[i]]
         version = question.choose_version()
-        autograder.cells.extend(version.get_cells(True))
         student.cells.extend(version.get_cells(False))
 
-        if not question.manual:
-            if Exam.config.get("public_tests", False):
-                student.cells.append(gen_test_cell(
-                    version.get_hash(),
-                    question.points,
-                    version.tests,
-                    st_test_dir
-                ))
-                remove_hidden_tests(st_test_dir)
-
-            autograder.cells.append(gen_test_cell(
+        if not question.manual and Exam.config.get("public_tests", False):
+            student.cells.append(gen_test_cell(
                 version.get_hash(),
                 question.points,
                 version.tests,
-                ag_test_dir
+                test_dir
             ))
     
+    # remove hidden tests
+    if Exam.config.get("public_tests", False):
+        remove_hidden_tests(test_dir)
+    
     # conclusion
-    autograder.cells.extend(Exam.conclusion)
     student.cells.extend(Exam.conclusion)
 
     # check all cell
+    if Exam.config.get("check_all_cell", True) and Exam.config.get("public_tests", False):
+        student.cells.extend(gen_check_all_cell())
+
+    # export cell
+    if Exam.config.get("export_cell", True):
+        export_cell = Exam.config.get("export_cell", True)
+        if export_cell is True:
+            export_cell = {}
+
+        student.cells.extend(gen_export_cells(
+            nb_name, 
+            export_cell.get('instructions', ''), 
+            pdf = export_cell.get('pdf', True),
+            filtering = export_cell.get('filtering', True)
+        ))
+
+    # remove output
+    remove_output(student)
+    
+    # write notebooks
+    nbformat.write(student, output_dir / nb_name)
+
+def create_and_write_autograder_exam(output_dir, nb_name):
+    test_dir = output_dir / 'tests'
+    os.makedirs(test_dir, exist_ok=True)
+
+    autograder = nbformat.v4.new_notebook()
+    
+    # init cell
+    if Exam.config.get("init_cell", True):
+        autograder.cells.append(gen_init_cell())
+    
+    # introduction
+    autograder.cells.extend(Exam.introduction)
+
+    # # get question indices
+    # question_idx = list(range(len(Exam.questions)))
+    # np.random.shuffle(question_idx)
+    # question_idx = question_idx[:num_questions]
+
+    # questions
+    for i, question in enumerate(Exam.questions):
+        autograder.cells.append(gen_question_header_cell(i + 1))
+
+        # question = Exam.questions[question_idx[i]]
+
+        for j, version in enumerate(question.versions):
+            autograder.cells.append(gen_version_header_cell(j + 1))
+            autograder.cells.extend(version.get_cells(True))
+
+            if not question.manual:
+                autograder.cells.append(gen_test_cell(
+                    version.get_hash(),
+                    question.points,
+                    version.tests,
+                    test_dir
+                ))
+    
+    # conclusion
+    autograder.cells.extend(Exam.conclusion)
+
+    # check all cell
     if Exam.config.get("check_all_cell", True):
-        if Exam.config.get("public_tests", False):
-            student.cells.extend(gen_check_all_cell())
         autograder.cells.extend(gen_check_all_cell())
 
     # export cell
@@ -185,19 +232,12 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
             pdf = export_cell.get('pdf', True),
             filtering = export_cell.get('filtering', True)
         ))
-        student.cells.extend(gen_export_cells(
-            nb_name, 
-            export_cell.get('instructions', ''), 
-            pdf = export_cell.get('pdf', True),
-            filtering = export_cell.get('filtering', True)
-        ))
 
+    # # remove output
     # remove_output(autograder)
-    remove_output(student)
     
     # write notebooks
-    nbformat.write(autograder, output_dir / 'autograder' / nb_name)
-    nbformat.write(student, output_dir / 'student' / nb_name)
+    nbformat.write(autograder, output_dir / nb_name)
 
 
 #---------------------------------------------------------------------------------------------------
@@ -340,6 +380,9 @@ def gen_export_cells(nb_path, instruction_text, pdf=True, filtering=True):
 
 def gen_question_header_cell(question_number):
     return nbformat.v4.new_markdown_cell(f"### Question {question_number}")
+
+def gen_version_header_cell(version_number):
+    return nbformat.v4.new_markdown_cell(f"#### Version {version_number}")
 
 
 #---------------------------------------------------------------------------------------------------
@@ -629,10 +672,6 @@ def parse_notebook(nb):
             Exam.conclusion = copy.deepcopy(cells)
             cells = []
         
-        # collect cells that are in between delim cells
-        elif in_introduction or in_question or in_version or in_conclusion:
-            cells.append(cell)
-        
         # raise errors for ENDs or other cells outside their blocks
         elif is_delim_cell(cell, "introduction", False):
             raise AssertionError("END INTRODUCTION found outside introduction block")
@@ -642,6 +681,11 @@ def parse_notebook(nb):
             raise AssertionError("END VERSION found outside version block")
         elif is_delim_cell(cell, "conclusion", False):
             raise AssertionError("END CONCLUSION found outside conclusion block")
+
+        # collect cells that are in between delim cells
+        elif in_introduction or in_question or in_version or in_conclusion:
+            cells.append(cell)
+
         else:
             raise AssertionError(f"Cell found outside a block: {cell}")
     
@@ -664,17 +708,20 @@ def main(args):
     nb = nbformat.read(master, as_version=NB_VERSION)
     parse_notebook(nb)
 
-    # create dirs
+    # create autograder notebook
+    nb_name = master.name
+    create_and_write_autograder_exam(result / "autograder", nb_name)
+
+    # create exams
     for i in range(Exam.config["num_students"]):
         if (i + 1) % 50 == 0 and not args.quiet:
             print(f"Generating exam {i + 1}")
         output_dir = result / f"exam_{i}"
-        nb_name = master.name
         create_and_write_exam_instance(output_dir, nb_name, Exam.config["num_questions"])
 
-    all_tests_path = result / 'tests'
-    os.makedirs(all_tests_path, exist_ok=True)
-    write_all_version_tests(all_tests_path)
+    # all_tests_path = result / 'tests'
+    # os.makedirs(all_tests_path, exist_ok=True)
+    # write_all_version_tests(all_tests_path)
 
     # generate Gradescope zip file
     if Exam.config.get("generate", {}):
