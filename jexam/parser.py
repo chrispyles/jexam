@@ -191,6 +191,9 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
             pdf = export_cell.get('pdf', True),
             filtering = export_cell.get('filtering', True)
         ))
+
+    remove_output(autograder)
+    remove_output(student)
     
     # write notebooks
     nbformat.write(autograder, output_dir / 'autograder' / nb_name)
