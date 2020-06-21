@@ -4,6 +4,7 @@ ipython
 nbconvert
 setuptools
 numpy
+otter-grader @ git+https://github.com/ucbds-infra/otter-grader.git@beta
 
 # testing requirements
 codecov
@@ -11,6 +12,6 @@ codecov
 # documentation requirements
 recommonmark
 sphinx_markdown_tables
-git+https://github.com/executablebookproject/sphinx-book-theme.git@35357b09fa4b3bc70259109d19ef795badbcd5b8
+sphinx-book-theme @ git+https://github.com/executablebookproject/sphinx-book-theme.git@35357b09fa4b3bc70259109d19ef795badbcd5b8
 sphinxcontrib-apidoc
 sphinx-argparse

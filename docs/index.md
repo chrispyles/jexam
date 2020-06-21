@@ -14,14 +14,8 @@ jExam works with different autograders to facilitate the easy grading of submiss
 
 ## Installation
 
-To install jExam, use pip:
+To install jExam, use pip. This will install jExam and its dependencies. **Note that jExam is currently only compatible with the beta version of Otter, which will overwrite the current version of Otter installed on your machine.**
 
 ```
 pip install jexam
-```
-
-If you are also going to be using Otter and Gradescope, you will need to install Otter so that the configuration zip files can be generated. **Note that jExam is currently only compatible with the beta version of Otter, which must be installed from Git.**
-
-```
-pip install git+https://github.com/ucbds-infra/otter-grader.git@beta
 ```

@@ -6,12 +6,14 @@ import re
 import os
 import yaml
 import copy
+import json
 import pprint
 import hashlib
 import pathlib
 import nbformat
 import numpy as np
 
+from textwrap import dedent
 from collections import namedtuple
 
 from .utils import str_to_doctest, generate
@@ -38,6 +40,7 @@ BEGIN_REGEXES = {
     "version": r"\s*BEGIN VERSION\s*",
     "conclusion": r"\s*BEGIN CONCLUSION\s*",
 }
+
 END_REGEXES = {
     "introduction": r"\s*END INTRODUCTION\s*",
     "question": r"\s*END QUESTION\s*",
@@ -108,6 +111,15 @@ class Exam:
     questions = []
     introduction = []
     conclusion = []
+    autograder_format = "otter"
+
+    @classmethod
+    def otter(cls):
+        return cls.autograder_format == "otter"
+    
+    @classmethod
+    def ok(cls):
+        return cls.autograder_format == "ok"
 
 def create_and_write_exam_instance(output_dir, nb_name, num_questions):
     test_dir = output_dir / 'tests'
@@ -118,10 +130,17 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
         os.makedirs(output_dir, exist_ok=True)
 
     student = nbformat.v4.new_notebook()
+
+    # create autograder config file for this dir
+    if Exam.otter():
+        gen_otter_file(output_dir / nb_name)
+        ok_path = None
+    elif Exam.ok():
+        ok_path = gen_dot_ok(output_dir / nb_name, Exam.config["endpoint"])
     
     # init cell
     if Exam.config.get("init_cell", True):
-        student.cells.append(gen_init_cell())
+        student.cells.append(gen_init_cell(ok_path))
     
     # introduction
     student.cells.extend(Exam.introduction)
@@ -182,10 +201,17 @@ def create_and_write_autograder_exam(output_dir, nb_name):
     os.makedirs(test_dir, exist_ok=True)
 
     autograder = nbformat.v4.new_notebook()
-    
+
+    # create autograder config file for this dir
+    if Exam.otter():
+        gen_otter_file(output_dir / nb_name)
+        ok_path = None
+    elif Exam.ok():
+        ok_path = gen_dot_ok(output_dir / nb_name, Exam.config["endpoint"])
+
     # init cell
     if Exam.config.get("init_cell", True):
-        autograder.cells.append(gen_init_cell())
+        autograder.cells.append(gen_init_cell(ok_path))
     
     # introduction
     autograder.cells.extend(Exam.introduction)
@@ -313,16 +339,79 @@ def get_delim_config(cell, delim):
 
 
 #---------------------------------------------------------------------------------------------------
+# AUTOGRADER CONFIG GENERATORS
+#---------------------------------------------------------------------------------------------------
+
+def gen_otter_file(notebook_path):
+    """Creates an Otter config file
+
+    Uses ``Exam.config`` to generate a ``.otter`` file to configure student use of Otter tools, 
+    including saving environments and submission to an Otter Service deployment
+
+    Args:
+        notebook_path (``pathlib.Path``): path to notebook
+    """
+    config = {}
+
+    service = Exam.config.get('service', {})
+    if service:
+        config.update({
+            "endpoint": service["endpoint"],
+            "auth": service.get("auth", "google"),
+            "assignment_id": service["assignment_id"],
+            "class_id": service["class_id"]
+        })
+
+    config["notebook"] = service.get('notebook', notebook_path.name)
+    config["save_environment"] = Exam.config.get("save_environment", False)
+    config["ignore_modules"] = Exam.config.get("ignore_modules", [])
+
+    if Exam.config.get("variables", None):
+        config["variables"] = Exam.config.get("variables")
+
+    config_path = notebook_path.with_suffix('.otter')
+    with open(config_path, "w+") as f:
+        json.dump(config, f, indent=4)
+
+def gen_dot_ok(notebook_path, endpoint):
+    """Generate .ok file and return its name."""
+    assert notebook_path.suffix == '.ipynb', notebook_path
+    ok_path = notebook_path.with_suffix('.ok')
+    name = notebook_path.stem
+    src = [notebook_path.name]
+    with open(ok_path, 'w') as out:
+        json.dump({
+            "name": name,
+            "endpoint": endpoint,
+            "src": src,
+            "tests": {
+                "tests/q*.py": "ok_test"
+            },
+            "protocols": [
+                "file_contents",
+                "grading",
+                "backup"
+            ]
+            }, out)
+    return ok_path.name
+
+
+#---------------------------------------------------------------------------------------------------
 # MISCELLANEOUS CELL GENERATORS
 #---------------------------------------------------------------------------------------------------
 
-def gen_init_cell():
+def gen_init_cell(dot_ok_name):
     """Generates a cell to initialize Otter in the notebook
     
     Returns:
         cell (``nbformat.NotebookNode``): new code cell
     """
-    cell = nbformat.v4.new_code_cell("# Initialize Otter\nimport otter\ngrader = otter.Notebook()")
+    if Exam.otter():
+        cell = nbformat.v4.new_code_cell("# Initialize Otter\nimport otter\ngrader = otter.Notebook()")
+    elif Exam.ok():
+        cell = nbformat.v4.new_code_cell(
+            "# Initialize OK\nfrom client.api.notebook import Notebook\n"
+            f"ok = Notebook(\"{dot_ok_name}\")")
     lock(cell)
     return cell
 
@@ -333,9 +422,18 @@ def gen_check_all_cell():
         ``list`` of ``nbformat.NotebookNode``: generated check-all cells
     """
     instructions = nbformat.v4.new_markdown_cell()
-    instructions.source = "---\n\nTo double-check your work, the cell below will rerun all of the autograder tests."
+    instructions.source = "To double-check your work, the cell below will rerun all of the autograder tests."
 
-    check_all = nbformat.v4.new_code_cell("grader.check_all()")
+    if Exam.otter():
+        check_all = nbformat.v4.new_code_cell("grader.check_all()")
+    elif Exam.ok():
+        check_all = nbformat.v4.new_code_cell(dedent("""\
+        # For your convenience, you can run this cell to run all the tests at once!
+        import os
+        print("Running all tests...")
+        _ = [ok.grade(q[:-3]) for q in os.listdir("tests") if q.startswith('q') and len(q) <= 10]
+        print("Finished running all tests.")    
+        """))
 
     lock(instructions)
     lock(check_all)
@@ -355,23 +453,40 @@ def gen_export_cells(nb_path, instruction_text, pdf=True, filtering=True):
         ``list`` of ``nbformat.NotebookNode``: generated export cells
 
     """
-    instructions = nbformat.v4.new_markdown_cell()
-    instructions.source = "## Submission\n\nMake sure you have run all cells in your notebook in order before \
-    running the cell below, so that all images/graphs appear in the output. The cell below will generate \
-    a zipfile for you to submit. **Please save before exporting!**"
-    
-    if instruction_text:
-        instructions.source += '\n\n' + instruction_text
+    if Exam.otter():
+        instructions = nbformat.v4.new_markdown_cell()
+        instructions.source = "## Submission\n\nMake sure you have run all cells in your notebook in order before \
+        running the cell below, so that all images/graphs appear in the output. The cell below will generate \
+        a zipfile for you to submit. **Please save before exporting!**"
+        
+        if instruction_text:
+            instructions.source += '\n\n' + instruction_text
 
-    export = nbformat.v4.new_code_cell()
-    source_lines = ["# Save your notebook first, then run this cell to export your submission."]
-    if filtering and pdf:
-        source_lines.append(f"grader.export()")
-    elif not filtering:
-        source_lines.append(f"grader.export(filtering=False)")
-    else:
-        source_lines.append(f"grader.export(pdf=False)")
-    export.source = "\n".join(source_lines)
+        export = nbformat.v4.new_code_cell()
+        source_lines = ["# Save your notebook first, then run this cell to export your submission."]
+        if filtering and pdf:
+            source_lines.append(f"grader.export()")
+        elif not filtering:
+            source_lines.append(f"grader.export(filtering=False)")
+        else:
+            source_lines.append(f"grader.export(pdf=False)")
+        export.source = "\n".join(source_lines)
+
+    elif Exam.ok():
+        instructions = nbformat.v4.new_markdown_cell()
+        instructions.source = (
+            "## Submission\n\nOnce you're finished, select \"Save and Checkpoint\" " 
+            "in the File menu and then execute the submit cell below. The result will contain a "
+            "link that you can use to check that your assignment has been submitted successfully."
+        )
+        
+        if instruction_text:
+            instructions.source += '\n\n' + instruction_text
+
+        export = nbformat.v4.new_code_cell()
+        source_lines = ["# Save your notebook first, then run this cell to submit."]
+        source_lines.append(f"_ = ok.submit()")
+        export.source = "\n".join(source_lines)
 
     lock(instructions)
     lock(export)
@@ -448,7 +563,10 @@ def gen_test_cell(name, points, tests, tests_dir):
         cell: code cell object with test
     """
     cell = nbformat.v4.new_code_cell()
-    cell.source = ['grader.check("{}")'.format(name)]
+    if Exam.otter():
+        cell.source = ['grader.check("{}")'.format(name)]
+    elif Exam.ok():
+        cell.source = ['ok.grade("{}");'.format(name)]
     suites = [gen_suite(tests)]
     points = points
     
@@ -703,6 +821,10 @@ def main(args):
     np.random.seed(seed)
 
     master, result = pathlib.Path(args.master), pathlib.Path(args.result)
+
+    # update Exam.autograder_format
+    assert args.format in ["otter", "ok"], f"Autograder format {args.format} invalid"
+    Exam.autograder_format = args.format
 
     # load notebook and parse
     nb = nbformat.read(master, as_version=NB_VERSION)

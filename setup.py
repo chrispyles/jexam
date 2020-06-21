@@ -23,5 +23,5 @@ setuptools.setup(
         "Operating System :: OS Independent",
 	],
 	install_requires = install_requires,
-	scripts=["bin/jexam"],
+	scripts = ["bin/jexam"],
 )
