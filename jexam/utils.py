@@ -26,6 +26,16 @@ def str_to_doctest(code_lines, lines):
         return str_to_doctest(code_lines, lines + [">>> " + line])
 
 def generate(result, config):
+    """
+    Runs Otter Generate on the directory ``result`` using the configurations provided in ``config``.
+
+    Args:
+        result (``pathlib.Path``): the path to the autograder directory
+        config (``dict``): configurations for Otter Generate
+
+    Raises:
+        ``ImportError``: if Otter is not installed
+    """
     try:
         from otter.argparser import get_parser
         parser = get_parser()

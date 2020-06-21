@@ -5,6 +5,12 @@
 import argparse
 
 def get_parser():
+    """
+    Creates and returns the argument parser for jExam
+    
+    Returns:
+        ``argparse.ArgumentParser``: the argument parser for jExam
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("master", type=str, help="Path to exam master notebook")
     parser.add_argument("result", nargs="?", default="dist", help="Path at which to write output notebooks")
