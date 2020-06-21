@@ -45,15 +45,19 @@ class TestJexam(unittest.TestCase):
                 f1, f2 = os.path.join(dir1, f1), os.path.join(dir2, f2)
                 self.assertDirsEqual(f1, f2)
 
-    def run_and_check_jexam(self, seed=None):
+    def run_and_check_jexam(self, seed=None, ok=False):
         nb_path = str(TEST_FILES_PATH / 'test-exam.ipynb')
         command = [nb_path]
         if seed is not None:
             command += ["-s", str(seed)]
+        if ok:
+            command += ["--format", "ok"]
         args = PARSER.parse_args(command)
         jexam(args)
 
         correct_dir = "dist-correct" if seed is None else f"dist-correct-{seed}"
+        if ok:
+            correct_dir += "-ok"
 
         self.assertDirsEqual("dist", TEST_FILES_PATH / correct_dir)
 
@@ -61,6 +65,12 @@ class TestJexam(unittest.TestCase):
         stdout = io.StringIO()
         with redirect_stdout(stdout):
             self.run_and_check_jexam()
+        self.assertEqual(stdout.getvalue().strip(), type(self).expected_stdout.strip(), "Process stdout incorrect")
+    
+    def test_notebook_ok(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            self.run_and_check_jexam(ok=True)
         self.assertEqual(stdout.getvalue().strip(), type(self).expected_stdout.strip(), "Process stdout incorrect")
     
     def test_seed_150(self):
