@@ -54,6 +54,23 @@ END_REGEXES = {
 #---------------------------------------------------------------------------------------------------
 
 class Version:
+    """
+    Represents a single version of a question. Contains methods to parse its cells for solution removal
+    and generating tests.
+
+    Args:
+        cells (``list`` of ``nbformat.NotebookNode``): the list of original (unparsed) cells that define
+            this version
+
+    Attributes:
+        original_cells (``list`` of ``nbformat.NotebookNode``): the original cells from the notebook 
+            (incl. test cells and solutions)
+        cells_with_solutions (``list`` of ``nbformat.NotebookNode``): the original cells with test 
+            cells removed and solutions left
+        cells_without_solutions (``list`` of ``nbformat.NotebookNode``): the original cells with 
+            solutions and test cells removed
+        tests (``list`` of ``Test``): the tests for this version as named tuples
+    """
     def __init__(self, cells):
         self.original_cells = cells
         self.cells_with_solutions = None
@@ -61,6 +78,10 @@ class Version:
         self.tests = []
 
     def _parse_cells(self):
+        """
+        Parses the original cells of this version to remove test cells and solutions. Populates 
+        ``cells_with_solutions`` and ``cells_without_solutions``.
+        """
         self.cells_with_solutions = []
         self.cells_without_solutions = []
         for cell in self.original_cells:
@@ -71,6 +92,16 @@ class Version:
                 self.cells_without_solutions.append(replace_cell_solutions(cell))
 
     def get_cells(self, include_solutions):
+        """
+        Returns the list of parsed cells for this version. If parsing hasn't been done yet, it parses
+        this version.
+
+        Args:
+            include_solutions (``bool``): whether to return the cells that contain solutions
+    
+        Returns:
+            ``list`` of ``nbformat.NotebookNode``: the list of parsed cells
+        """
         if self.cells_with_solutions is None or self.cells_without_solutions is None:
             self._parse_cells()
         if include_solutions:
@@ -78,15 +109,42 @@ class Version:
         return self.cells_without_solutions
 
     def any_public_tests(self):
+        """
+        Returns whether this version has any public tests.
+
+        Returns:
+            ``bool``: whether this version has any public tests
+        """
         return any([not t.hidden for t in self.tests])
     
     def get_hash(self):
+        """
+        Returns a SHA-256 hash of this version.
+
+        Returns:
+            ``str``: the hash of this version
+        """
         source = ""
         for cell in self.original_cells:
             source += "\n".join(get_source(cell))
         return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 class Question:
+    """
+    Represents a single question in the exam with multiple versions.
+
+    Args:
+        versions (``list`` of ``Version``): the versions of this question
+        points (``int``): the number of points this question is worth
+        manual (``bool``): whether this question is manually graded
+
+    Attributes:
+        versions (``list`` of ``Version``): the versions of this question
+        points (``int``): the number of points this question is worth
+        manual (``bool``): whether this question is manually graded
+        unused_versions (``list`` of ``int``): a list of indices in ``versions`` that haven't been 
+            used yet; repopulated when this list becomes empty
+    """
     def __init__(self, versions, points, manual):
         if not isinstance(versions, list):
             self.versions = [versions]
@@ -98,15 +156,33 @@ class Question:
         self.unused_versions = list(range(len(self.versions)))
 
     def choose_version(self):
+        """
+        Randomly selects a version of this question from ``unused_versions`` and returns it. Removes 
+        its index from ``unused_versions`` Repopulates``unused_versions`` if empty.
+
+        Returns:
+            ``Version``: the chosen version
+        """
         if  len(self.unused_versions) == 0:
             self.unused_versions = list(range(len(self.versions)))
-            return self.choose_version()
         idx = np.random.choice(self.unused_versions)
         self.unused_versions.remove(idx)
         version = self.versions[idx]
         return version
 
 class Exam:
+    """
+    Contains configurations and lists of cells/objects that define an Exam. This class is not designed
+    to be instantiated but to have its class attributes edited directly.
+
+    Attributes:
+        config (``dict``): configurations for the exam
+        questions (``list` of ``Question``): the questions that make up this exam
+        introduction (``list`` of ``nbformat.NotebookNode``): a list of preamble cells for the notebook
+        conclusion (``list`` of ``nbformat.NotebookNode``): a list of postamble cells for the notebook
+        autograder_format (``str``): a string defining the autograder output format; either "otter"
+            for Otter-Grader or "ok" for OkPy
+    """
     config = {}
     questions = []
     introduction = []
@@ -115,13 +191,35 @@ class Exam:
 
     @classmethod
     def otter(cls):
+        """
+        Returns whether the autograder format for this exam is Otter-Grader
+        
+        Returns:
+            ``bool``: whether the autograder format for this exam is Otter-Grader 
+        """
         return cls.autograder_format == "otter"
     
     @classmethod
     def ok(cls):
+        """
+        Returns whether the autograder format for this exam is OkPy
+        
+        Returns:
+            ``bool``: whether the autograder format for this exam is OkPy 
+        """
         return cls.autograder_format == "ok"
 
 def create_and_write_exam_instance(output_dir, nb_name, num_questions):
+    """
+    Creates a single exam notebook using nbformat with solutions removes and writes that notebook at
+    ``{{ output_dir }}/{{ nb_name }}``. Randomly selects ``num_questions`` questions from ``Exam.questions``
+    and includes test cells if ``Exam.config.get("public_tests", False)`` is ``True``. 
+
+    Args:
+        output_dir (``pathlib.Path``): the path to the output directory
+        nb_name (``str``): the filename of the notebook
+        num_questions (``int``): the number of questions for the exam
+    """
     test_dir = output_dir / 'tests'
 
     if Exam.config.get("public_tests", False):
@@ -184,7 +282,6 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
             export_cell = {}
 
         student.cells.extend(gen_export_cells(
-            nb_name, 
             export_cell.get('instructions', ''), 
             pdf = export_cell.get('pdf', True),
             filtering = export_cell.get('filtering', True)
@@ -197,6 +294,15 @@ def create_and_write_exam_instance(output_dir, nb_name, num_questions):
     nbformat.write(student, output_dir / nb_name)
 
 def create_and_write_autograder_exam(output_dir, nb_name):
+    """
+    Formats and writes a solutions notebook containing all questions and all versions to the path
+    ``{{ output_dir }}/{{ nb_name }}``. Also creates test cells and autograder tests files included
+    in the ``tests`` subdirectory of ``output_dir``.
+
+    Args:
+        output_dir (``pathlib.Path``): the path to the output directory
+        nb_name (``str``): the filename of the notebook
+    """
     test_dir = output_dir / 'tests'
     os.makedirs(test_dir, exist_ok=True)
 
@@ -253,7 +359,6 @@ def create_and_write_autograder_exam(output_dir, nb_name):
             export_cell = {}
 
         autograder.cells.extend(gen_export_cells(
-            nb_name, 
             export_cell.get('instructions', ''), 
             pdf = export_cell.get('pdf', True),
             filtering = export_cell.get('filtering', True)
@@ -271,7 +376,7 @@ def create_and_write_autograder_exam(output_dir, nb_name):
 #---------------------------------------------------------------------------------------------------
 
 def get_source(cell):
-    """Get the source code of a cell in a way that works for both nbformat and JSON
+    """Gets the source code of a cell in a way that works for both nbformat and JSON
     
     Args:
         cell (``nbformat.NotebookNode``): notebook cell
@@ -287,7 +392,7 @@ def get_source(cell):
     assert False, f'unknown source type: {type(source)}'
 
 def remove_output(nb):
-    """Remove all outputs from a notebook
+    """Removes all outputs from a notebook
     
     Args:
         nb (``nbformat.NotebookNode``): a notebook
@@ -307,12 +412,36 @@ def lock(cell):
     m["deletable"] = False
 
 def is_raw_cell(cell):
+    """Returns whether a cell is a raw cell
+
+    Args:
+        cell (``nbformat.NotebookNode``): the cell in question
+
+    Returns:
+        ``bool``: whether a cell is a raw cell
+    """
     return cell["cell_type"] == "raw"
 
 def is_markdown_cell(cell):
+    """Returns whether a cell is a Markdown cell
+
+    Args:
+        cell (``nbformat.NotebookNode``): the cell in question
+
+    Returns:
+        ``bool``: whether a cell is a Markdown cell
+    """
     return cell["cell_type"] == "markdown"
 
 def is_code_cell(cell):
+    """Returns whether a cell is a code cell
+
+    Args:
+        cell (``nbformat.NotebookNode``): the cell in question
+    
+    Returns:
+        ``bool``: whether a cell is a code cell
+    """
     return cell["cell_type"] == "code"
 
 
@@ -321,6 +450,18 @@ def is_code_cell(cell):
 #---------------------------------------------------------------------------------------------------
 
 def is_delim_cell(cell, delim, begin):
+    """
+    Returns whether a cell is a delimiter cell. Uses a regex in ``BEGIN_REGEXES`` or ``END_REGEXES`` 
+    (based on the value of ``begin``). ``delim`` should be a key of one of these dictionaries.
+
+    Args:
+        cell (``nbformat.NotebookNode``): the cell in question
+        delim (``str``): the delimiter type; a key of one of the regex dicts
+        begin (``bool``): whether to look in ``BEGIN_REGEXES`` (rather than ``END REGEXES``)
+
+    Returns:
+        ``bool``: whether the cell is a delimiter cell
+    """
     if not is_raw_cell(cell):
         return False
     source = get_source(cell)
@@ -329,8 +470,18 @@ def is_delim_cell(cell, delim, begin):
     return bool(re.match(END_REGEXES[delim], source[0], flags=re.IGNORECASE))
 
 def get_delim_config(cell, delim):
-    if not is_raw_cell(cell):
-        return False
+    """
+    Returns the delimiter config given by running the source of ``cell`` through a YAML parser after
+    removing the first line (the ``BEGIN __________`` line)
+
+    Args:
+        cell (``nbformat.NotebookNode``): the cell in question
+        delim (``str``): the delimiter type; a key of ``BEGIN_REGEXES``
+    
+    Returns:
+        iterable: the YAML-parsed config
+    """
+    assert is_raw_cell(cell), "cannot get delim config from non-raw cell"
     source = get_source(cell)[1:]
     config = yaml.full_load("\n".join(source))
     if config is None:
@@ -343,9 +494,8 @@ def get_delim_config(cell, delim):
 #---------------------------------------------------------------------------------------------------
 
 def gen_otter_file(notebook_path):
-    """Creates an Otter config file
-
-    Uses ``Exam.config`` to generate a ``.otter`` file to configure student use of Otter tools, 
+    """
+    Uses ``Exam.config`` to generate a .otter file to configure student use of Otter tools, 
     including saving environments and submission to an Otter Service deployment
 
     Args:
@@ -374,7 +524,16 @@ def gen_otter_file(notebook_path):
         json.dump(config, f, indent=4)
 
 def gen_dot_ok(notebook_path, endpoint):
-    """Generate .ok file and return its name."""
+    """
+    Generates .ok file and return its name
+    
+    Args:
+        notebook_path (``pathlib.Path``): the path to the notebook
+        endpoint (``str``): an endpoint specification for https://okpy.org
+    
+    Returns:
+        ``str``: the name of the .ok file
+    """
     assert notebook_path.suffix == '.ipynb', notebook_path
     ok_path = notebook_path.with_suffix('.ok')
     name = notebook_path.stem
@@ -401,7 +560,12 @@ def gen_dot_ok(notebook_path, endpoint):
 #---------------------------------------------------------------------------------------------------
 
 def gen_init_cell(dot_ok_name):
-    """Generates a cell to initialize Otter in the notebook
+    """
+    Generates a cell to initialize Otter or OkPy in the notebook. Uses ``Exam.otter()`` and ``Exam.ok()``
+    to determine which type of init cell should be generated.
+
+    Args:
+        dot_ok_name (``str`` or ``None``): the name of the .ok file if it exists otherwise ``None``
     
     Returns:
         cell (``nbformat.NotebookNode``): new code cell
@@ -416,7 +580,9 @@ def gen_init_cell(dot_ok_name):
     return cell
 
 def gen_check_all_cell():
-    """Generates an ``otter.Notebook.check_all`` cell
+    """
+    Generates a check-all cell that runs all tests for a notebook. Determines the format of this cell 
+    using ``Exam.otter()`` and ``Exam.ok()``.
     
     Returns:
         ``list`` of ``nbformat.NotebookNode``: generated check-all cells
@@ -440,17 +606,18 @@ def gen_check_all_cell():
 
     return [instructions, check_all]
 
-def gen_export_cells(nb_path, instruction_text, pdf=True, filtering=True):
-    """Generates export cells
+def gen_export_cells(instruction_text, pdf=True, filtering=True):
+    """
+    Generates export or submit cells for the notebook. Determines the format of this cell using 
+    ``Exam.otter()`` and ``Exam.ok()``.
     
     Args:
-        nb_path (``str``): path to master notebook
-        instruction_text (``str``): extra instructions for students when exporting
-        pdf (``bool``, optional): whether a PDF is needed
-        filtering (``bool``, optional): whether PDF filtering is needed
+        instruction_text (``str``): extra instructions for students when exporting/submitting
+        pdf (``bool``, optional): whether a PDF is needed; for Otter only
+        filtering (``bool``, optional): whether PDF filtering is needed; for Otter only
     
     Returns:
-        ``list`` of ``nbformat.NotebookNode``: generated export cells
+        ``list`` of ``nbformat.NotebookNode``: generated export/submit cells
 
     """
     if Exam.otter():
@@ -494,9 +661,29 @@ def gen_export_cells(nb_path, instruction_text, pdf=True, filtering=True):
     return [instructions, export, nbformat.v4.new_markdown_cell(" ")]    # last cell is buffer
 
 def gen_question_header_cell(question_number):
+    """
+    Generates a Markdown cell with contents ``### Question {{ question_number }}`` to delimit questions
+    in the exam.
+
+    Args:
+        question_number (``int``): the number of the question
+    
+    Returns:
+        ``nbformat.NotebookNode``: the Markdown cell
+    """
     return nbformat.v4.new_markdown_cell(f"### Question {question_number}")
 
 def gen_version_header_cell(version_number):
+    """
+    Generates a Markdown cell with contents ``### Version {{ version_number }}`` to delimit versions
+    in the exam noteook with solutions.
+
+    Args:
+        version_number (``int``): the number of the version
+    
+    Returns:
+        ``nbformat.NotebookNode``: the Markdown cell
+    """
     return nbformat.v4.new_markdown_cell(f"#### Version {version_number}")
 
 
@@ -505,7 +692,7 @@ def gen_version_header_cell(version_number):
 #---------------------------------------------------------------------------------------------------
 
 def is_test_cell(cell):
-    """Return whether the current cell is a test cell
+    """Returns whether a cell is a test cell
     
     Args:
         cell (``nbformat.NotebookNode``): a notebook cell
@@ -521,13 +708,13 @@ def is_test_cell(cell):
 Test = namedtuple('Test', ['input', 'output', 'hidden'])
 
 def read_test(cell):
-    """Return the contents of a test as an (input, output, hidden) tuple
+    """Returns the contents of a test as an ``(input, output, hidden)`` named tuple
     
     Args:
         cell (``nbformat.NotebookNode``): a test cell
 
     Returns:
-        ``otter.assign.Test``: test named tuple
+        ``Test``: test named tuple
     """
     hidden = bool(re.search("hidden", get_source(cell)[0], flags=re.IGNORECASE))
     output = ''
@@ -541,7 +728,7 @@ def read_test(cell):
     return Test('\n'.join(get_source(cell)[1:]), output, hidden)
 
 def write_test(path, test):
-    """Write an OK test file
+    """Writes an OK-formatted test file
     
     Args:
         path (``str``): path of file to be written
@@ -552,15 +739,18 @@ def write_test(path, test):
         pprint.pprint(test, f, indent=4, width=200, depth=None)
 
 def gen_test_cell(name, points, tests, tests_dir):
-    """Write test files to tests directory
+    """
+    Writes test files to tests directory. Returns a code cell that runs the check in either Otter
+    or OkPy format.
     
     Args:
-        question (``dict``): question metadata
-        tests (``list`` of ``otter.assign.Test``): tests to be written
+        name (``str``): the name of the test
+        points (``int``): the value of the test
+        tests (``list`` of ``Test``): tests to be written
         tests_dir (``pathlib.Path``): path to tests directory
 
     Returns:
-        cell: code cell object with test
+        ``nbformat.NotebookNode``: code cell that runs the test
     """
     cell = nbformat.v4.new_code_cell()
     if Exam.otter():
@@ -581,10 +771,10 @@ def gen_test_cell(name, points, tests, tests_dir):
     return cell
 
 def gen_suite(tests):
-    """Generate an OK test suite for a test
+    """Generates an OK test suite for a test
     
     Args:
-        tests (``list`` of ``otter.assign.Test``): test cases
+        tests (``list`` of ``Test``): test cases
 
     Returns:
         ``dict``: OK test suite
@@ -599,10 +789,10 @@ def gen_suite(tests):
     }
 
 def gen_case(test):
-    """Generate an OK test case for a test
+    """Generates an OK test case for a test
     
     Args:
-        test (``otter.assign.Test``): OK test for this test case
+        test (``Test``): OK test for this test case
 
     Returns:
         ``dict``: the OK test case
@@ -622,7 +812,7 @@ def gen_case(test):
     }
 
 def remove_hidden_tests(test_dir):
-    """Rewrite test files to remove hidden tests
+    """Rewrites test files to remove hidden tests
     
     Args:
         test_dir (``pathlib.Path``): path to test files directory
@@ -640,16 +830,16 @@ def remove_hidden_tests(test_dir):
                     suite['cases'].pop(i)
         write_test(f, test)
 
-def write_all_version_tests(output_dir):
-    for question in Exam.questions:
-        if not question.manual:
-            for version in question.versions:
-                gen_test_cell(
-                    version.get_hash(),
-                    question.points,
-                    version.tests,
-                    output_dir
-                )
+# def write_all_version_tests(output_dir):
+#     for question in Exam.questions:
+#         if not question.manual:
+#             for version in question.versions:
+#                 gen_test_cell(
+#                     version.get_hash(),
+#                     question.points,
+#                     version.tests,
+#                     output_dir
+#                 )
 
 
 #---------------------------------------------------------------------------------------------------
@@ -657,13 +847,13 @@ def write_all_version_tests(output_dir):
 #---------------------------------------------------------------------------------------------------
 
 def is_markdown_solution_cell(cell):
-    """Whether the cell matches MD_SOLUTION_REGEX
+    """Returns whether a cell is a Markdown solution cell
     
     Args:
-        cell (``nbformat.NotebookNode``): notebook cell
+        cell (``nbformat.NotebookNode``): a notebook cell
     
     Returns:
-        ``bool``: whether the current cell is a Markdown solution cell
+        ``bool``: whether the cell is a Markdown solution cell
     """
     if not is_markdown_cell(cell):
         return False
@@ -689,7 +879,7 @@ SUBSTITUTIONS = [
 ]
 
 def replace_solutions(lines):
-    """Replace solutions in lines, a list of strings
+    """Replaces solutions in lines, a list of strings
     
     Args:
         lines (``list`` of ``str``): solutions as a list of strings
@@ -725,6 +915,18 @@ def replace_solutions(lines):
     return stripped
 
 def replace_cell_solutions(cell):
+    """
+    Takes an arbitrary cell and replaces the solutions in it, if present. If a Markdown solution cell,
+    replaces the entire cell with a Markdown response cell (copied from ``MARKDOWN_ANSWER_CELL_TEMPLATE```).
+    If a code cell, replaces only lines that contain solution delimiting comments based on ``replace_solutions``.
+    Otherwise, returns the original cell.
+
+    Args:
+        cell (``nbformat.NotebookNode``): the cell to replace
+    
+    Returns:
+        ``nbformat.NotebookNode``: the sanitized cell
+    """
     if is_markdown_solution_cell(cell):
         return copy.deepcopy(MARKDOWN_ANSWER_CELL_TEMPLATE)
     elif is_code_cell(cell):
@@ -742,6 +944,19 @@ def replace_cell_solutions(cell):
 #---------------------------------------------------------------------------------------------------
 
 def parse_notebook(nb):
+    """
+    Parses a master notebook into the requisite types and configurations needed for generating the exam.
+    Populates fields in ``Exam`` and creates ``Questions`` and ``Versions`` based on delimeter cells.
+    Raises ``AssertionError``s if the notebook is improperly formatted.
+
+    Args:
+        nb (``nbformat.NotebookNode``): the master notebook
+    
+    Raises:
+        ``AssertionError``: if the notebook is improperly formatted (if ``BEGIN`` blocks have no ``END``
+            if there are ``END`` blocks with no ``BEGIN``, or if there are cells outside a delimiter
+            block)
+    """
     in_introduction, in_question, in_version, in_conclusion = tuple(False for _ in range(4))
     cells, config = [], {}
     questions, versions = [], []
@@ -816,10 +1031,18 @@ def parse_notebook(nb):
 #---------------------------------------------------------------------------------------------------
 
 def main(args):
-    # seed np.random
-    seed = args.seed or Exam.config.get("seed", 42)
-    np.random.seed(seed)
+    """
+    Runs jExam. Parses master notebook, seeds ``np.random``, and creates the number of exams specified
+    in the exam config. Writes these to ``{{ args.result }}/exam_*``. Also writes a solutions notebook
+    containing all questions, versions, and autograder tests to ``{{ args.result }}/autograder``. If
+    specified, also generates a Gradescope zip file to use with Otter.
 
+    Args:
+        args (``argparse.Namespace``): parsed command-line arguments
+
+    Raises:
+        ``AssertionError``: if ``args.format`` is invalid
+    """
     master, result = pathlib.Path(args.master), pathlib.Path(args.result)
 
     # update Exam.autograder_format
@@ -829,6 +1052,10 @@ def main(args):
     # load notebook and parse
     nb = nbformat.read(master, as_version=NB_VERSION)
     parse_notebook(nb)
+
+    # seed np.random in advance of creating student versions
+    seed = args.seed or Exam.config.get("seed", 42)
+    np.random.seed(seed)
 
     # create autograder notebook
     nb_name = master.name
