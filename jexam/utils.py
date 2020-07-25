@@ -2,6 +2,8 @@
 ##### jExam Utilities #####
 ###########################
 
+import os
+
 def str_to_doctest(code_lines, lines):
     """
     Converts a list of lines of Python code ``code_lines`` to a list of doctest-formatted lines ``lines``
@@ -37,6 +39,7 @@ def generate(result, config):
         ``ImportError``: if Otter is not installed
     """
     try:
+        from otter.generate.token import APIClient
         from otter.argparser import get_parser
         parser = get_parser()
     except ImportError:

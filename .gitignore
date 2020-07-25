@@ -11,3 +11,6 @@ test/tests
 test/output
 .sos
 docs/_build
+credentials.json
+token.pickle
+.ionide

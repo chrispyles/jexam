@@ -7,10 +7,10 @@
 import argparse
 
 from jexam.argparser import get_parser
-from jexam.parser import main as jexam
 
 parser = get_parser()
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    jexam(args)
+    args = parser.parse_args()    
+    assert hasattr(args, "func"), "You must specify a command to use jExam"
+    args.func(args)
